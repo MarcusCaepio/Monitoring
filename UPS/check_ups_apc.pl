@@ -21,6 +21,10 @@
 #    along with this program; if not, write to the Free Software
 #    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA    02111-1307    USA
 #
+# 2017-05-29: Momcilo Medic medicmomcilo (at) gmail.com
+#	- added battery temperature thresholds support
+# 2017-02-07: Oliver Skibbe oliskibbe (at) gmail.com
+#	- added SNMPv1 support
 # 2016-11-29: Oliver Skibbe oliskibbe (at) gmail.com
 #       - disabling icinga embedded perl interpreter
 #       - fixed external sensor option
@@ -66,13 +70,13 @@ if (@ARGV < 1) {
 }
 
 # Parse out the arguments...
-my ($ip, $community, $version, $user_name, $auth_password, $auth_prot, $priv_password, $priv_prot, $with_external_sensor) = parse_args();
+my ($ip, $community, $battemperature_warn, $battemperature_crit, $version, $user_name, $auth_password, $auth_prot, $priv_password, $priv_prot, $with_external_sensor) = parse_args();
 
 # Initialize variables....
 my $net_snmp_debug_level = 0x00;	# See http://search.cpan.org/~dtown/Net-SNMP-v6.0.1/lib/Net/SNMP.pm#debug()_-_set_or_get_the_debug_mode_for_the_module
 
 $script    = "check_ups_apc.pl";
-$script_version = "1.4.1";
+$script_version = "1.5";
 
 $timeout = 10;			# SNMP query timeout
 $status = 0;
@@ -113,8 +117,6 @@ $remaining_time_crit = 5;
 $remaining_time_warn = 15;
 $output_load_crit = 80;
 $output_load_warn = 70;
-$battemperature_crit = 33;
-$battemperature_warn = 31;
 $exttemperature_crit = 30;
 $exttemperature_warn = 26;
 $battery_capacity_crit = 35;
@@ -135,6 +137,7 @@ if ( $version == 3 ) {
 	($s, $e) = get_snmp_session(
 				$ip, 
 				$community, 
+				$version
 			);	# Open an SNMP connection...
 }
 
@@ -536,14 +539,15 @@ sub main {
 sub get_snmp_session {
   my $ip        = $_[0];
   my $community = $_[1];
+  my $version   = $_[2];
   my ($session, $error) = Net::SNMP->session(
              	-hostname  => $ip,
              	-community => $community,
              	-port      => 161,
              	-timeout   => 5,
              	-retries   => 3,
-		-debug		=> $net_snmp_debug_level,
-		-version	=> 2,
+		-debug	   => $net_snmp_debug_level,
+		-version   => $version,
               );
   return ($session, $error);
 } # end get snmp session
@@ -580,6 +584,8 @@ sub parse_args
 	my $ip = "";
 	my $version = "2";
 	my $community = "public";	# v1/v2c
+	my $battemperature_crit = "31";
+	my $battemperature_crit = "33";
 	
 	my $user_name = "public"; 	# v3
 	my $auth_password = "";		# v3
@@ -595,6 +601,8 @@ sub parse_args
 	GetOptions(
 		'host|H=s'		=> \$ip,
 		'version|v:s'		=> \$version,
+		'warntemp|w:s'		=> \$battemperature_warn,
+		'crittemp|c:s'		=> \$battemperature_crit,
 		'community|C:s' 	=> \$community,
 		'externalsensor|S!' 	=> \$with_external_sensor,
 		'username|U:s'  	=> \$user_name,
@@ -608,7 +616,7 @@ sub parse_args
 	usage() if $help;
 
   	return (
-		$ip, $community, $version, $user_name, $auth_password, $auth_prot, $priv_password, $priv_prot, $with_external_sensor
+		$ip, $community, $battemperature_warn, $battemperature_crit, $version, $user_name, $auth_password, $auth_prot, $priv_password, $priv_prot, $with_external_sensor
 		); 
 }	
 
@@ -626,6 +634,8 @@ Usage: -H <hostname> -C <community> [...]
 Options: 
          -H     Hostname or IP address
          -S     with external sensor (like PowerNet)
+         -w     Warning threshold for battery temperature
+         -c     Critical threshold for battery temperature
    SNMPv1/2
          -C     Community (default is public)
    SNMPv3
